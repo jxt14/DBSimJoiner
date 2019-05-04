@@ -14,9 +14,10 @@
 #include <cmath>
 #include <map>
 
-const int SUCCESS = 0;
-const int FAILURE = 1;
-
+struct qgramsort{
+    int id;
+    std::string s;
+};
 
 struct trie
 {
@@ -30,7 +31,6 @@ struct trie
 		sl = -1;
 		for(int i = 0; i <= 128; i++)node[i] = NULL;
 		qgram.clear();
-		qgram.push_back(0);
 	}
 };
 
@@ -54,23 +54,27 @@ public:
     SimJoiner();
     ~SimJoiner();
 	std::vector<std::string> data1,data2;
+    int sz1,sz2;
 	unsigned qlimit;
 	trie* qroot;
 	trie* jacroot;
 	std::map<int, std::set<unsigned>> jacset;	
 
-	pii qlists[200011];
-	int querycheck[200011],occurtime[200011];
-	int qsize;//the qgram size of the query string
+    int qthresh,prethresh;
+    int occurtime[200011],querycheck[200011];
+    int querytime;
 
 	void insert(trie*, const char*, int, int);
-	void search(trie*, const char*, int);
+    trie* search(trie*, const char*, int);
+    void clean(trie*);
 	void createIndex(const char *filename, std::vector<std::string>& datas);
 	int CalCulateED(const char*, int, const char*, int, int);
-    
+    void BuildED();
+
 	double timebuild,timequery,timedp;
     int joinJaccard(const char *filename1, const char *filename2, double threshold, std::vector<JaccardJoinResult> &result);
     int joinED(const char *filename1, const char *filename2, unsigned threshold, std::vector<EDJoinResult> &result);
+    
 };
 
 #endif

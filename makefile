@@ -1,17 +1,10 @@
-CXX=g++-4.8
-CXXFLAGS=-std=c++11 -Wall -O3 -MMD -MP
-TARGET=simjoiner
+main: main.o SimJoiner.o
+	g++ main.o SimJoiner.o -o main -g
 
-SRC=$(shell ls *.cpp)
-
-all: $(TARGET)
-
-$(TARGET): $(SRC:.cpp=.o)
-	$(CXX) $(CXXFLAGS) $+ -o $@
-
--include $(SRC:.cpp=.d)
+SimJoiner.o:SimJoiner.cpp SimJoiner.h
+	g++ SimJoiner.cpp -c
+main.o:main.cpp SimJoiner.h
+	g++ main.cpp -c
 
 clean:
-	$(RM) *.o *.d $(TARGET)
-
-.PHONY: all clean
+	rm main.o SimJoiner.o main
