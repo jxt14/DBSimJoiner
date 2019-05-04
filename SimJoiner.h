@@ -1,6 +1,7 @@
 #ifndef __EXP2_SIMJOINER_H__
 #define __EXP2_SIMJOINER_H__
 
+#include <assert.h>
 #include <vector>
 #include <utility>
 #include <iostream>
@@ -13,11 +14,6 @@
 #include <set>
 #include <cmath>
 #include <map>
-
-struct qgramsort{
-    int id;
-    std::string s;
-};
 
 struct trie
 {
@@ -35,6 +31,7 @@ struct trie
 };
 
 typedef std::pair<int,trie*> pii;
+typedef std::pair<int,int> pi;
 
 template <typename IDType, typename SimType>
 struct JoinResult {
@@ -54,6 +51,8 @@ public:
     SimJoiner();
     ~SimJoiner();
 	std::vector<std::string> data1,data2;
+    std::map<std::string, int> qgram1,qgram2;
+    std::vector<int> les2;
     int sz1,sz2;
 	unsigned qlimit;
 	trie* qroot;
@@ -67,9 +66,10 @@ public:
 	void insert(trie*, const char*, int, int);
     trie* search(trie*, const char*, int);
     void clean(trie*);
-	void createIndex(const char *filename, std::vector<std::string>& datas);
+	void createIndex(const char*, std::vector<std::string>&, std::map<std::string, int>&);
 	int CalCulateED(const char*, int, const char*, int, int);
-    void BuildED();
+    void BuildED(unsigned);
+    int checkED(int, int, unsigned);
 
 	double timebuild,timequery,timedp;
     int joinJaccard(const char *filename1, const char *filename2, double threshold, std::vector<JaccardJoinResult> &result);
