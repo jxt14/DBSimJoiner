@@ -51,10 +51,10 @@ public:
     SimJoiner();
     ~SimJoiner();
 	std::vector<std::string> data1,data2;
-    std::map<std::string, int> qgram1,qgram2;
-    std::vector<int> les2;
+    std::map<std::string, int> qgrams;
+    std::vector<int> les,lesable;
     int sz1,sz2;
-	unsigned qlimit;
+	int qlimit;
 	trie* qroot;
 	trie* jacroot;
 	std::map<int, std::set<unsigned>> jacset;	
@@ -66,10 +66,9 @@ public:
 	void insert(trie*, const char*, int, int);
     trie* search(trie*, const char*, int);
     void clean(trie*);
-	void createIndex(const char*, std::vector<std::string>&, std::map<std::string, int>&);
+	void createIndex(const char*, std::vector<std::string>&);
 	int CalCulateED(const char*, int, const char*, int, int);
-    void BuildED(unsigned);
-    int checkED(int, int, unsigned);
+    void BuildED(int);
 
 	double timebuild,timequery,timedp;
     int joinJaccard(const char *filename1, const char *filename2, double threshold, std::vector<JaccardJoinResult> &result);

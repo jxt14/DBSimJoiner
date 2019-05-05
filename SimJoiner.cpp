@@ -9,6 +9,12 @@ SimJoiner::SimJoiner() {
 SimJoiner::~SimJoiner() {
 }
 
+bool ccmp(EDJoinResult a, EDJoinResult b)
+{
+    if(a.id1 != b.id1)return a.id1 < b.id1;
+    else return a.id2 < b.id2;
+}
+
 inline int my_abs(int x)
 {
 	if (x > 0) return x;
@@ -57,7 +63,7 @@ int SimJoiner::CalCulateED(const char* s1, int m, const char* s2, int n, int thr
 
 }
 
-void SimJoiner::createIndex(const char *filename, vector<string>& datas, map<string,int>& qgrams)
+void SimJoiner::createIndex(const char *filename, vector<string>& datas)
 {
 	char c;
 	bool p;
@@ -68,7 +74,6 @@ void SimJoiner::createIndex(const char *filename, vector<string>& datas, map<str
 
     qcheck.clear();
     datas.clear();
-    qgrams.clear();
  //   cout << "input " << filename << endl;
 
 	fp.open(filename);
@@ -125,21 +130,24 @@ void SimJoiner::clean(trie* rt)
     delete rt;
 }
 
-void SimJoiner::BuildED(unsigned threshold)
+void SimJoiner::BuildED(int threshold)
 {
     string temp;
     int len;
     pi a[311];
-    les2.clear();
+    les.clear();
     for (int i = 0; i < sz2; i++) {
         len = data2[i].length();
+        if (len <= threshold * qlimit + qlimit - 1 + threshold){
+            lesable.push_back(i);
+        }
         if (len - qlimit + 1 - threshold * qlimit <= 0) {
-            les2.push_back(i);
+            les.push_back(i);
         }
         else{
             for (int j = 0; j < len-qlimit+1; j++){
                 a[j+1].second = j;
-                a[j+1].first = qgram2[data2[i].substr(j, qlimit)];
+                a[j+1].first = qgrams[data2[i].substr(j, qlimit)];
             }
             sort(a+1, a+1+len-qlimit+1);
             for (int j = 1; j <= prethresh; j++) {
@@ -156,19 +164,14 @@ int SimJoiner::joinJaccard(const char *filename1, const char *filename2, double 
     return SUCCESS;
 }
 
-int SimJoiner::checkED(int id1, int id2, unsigned threshold)
-{
-    int val = CalCulateED(data1[id1].c_str(), data1[id1].length(), data2[id2].c_str(), data2[id2].length(), threshold);
-    return val;
-}
-
 int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned threshold, vector<EDJoinResult> &result) {
     
     trie* sans;
     string tempt;
-    vector<int> cand;
+    int cand[200011];
+    int candtot,suf1,suf2;
 
-    int len,lt,t,val;
+    int Len,t,val;
     pi a[311];
     EDJoinResult res;
 
@@ -176,57 +179,24 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
     qroot = new trie();
 
     prethresh = threshold * qlimit + 1;
-    createIndex(filename2, data2, qgram2);
-    int tt = 2;
- //  cout << "input end " << endl;
-    sz2 = data2.size();
-    BuildED(threshold);
-    createIndex(filename1, data1, qgram1);
+    qgrams.clear();
+    createIndex(filename2, data2);
+    createIndex(filename1, data1);
+    sz2 = data2.size();    
     sz1 = data1.size();
+    BuildED(threshold);
 
     for (int i = 0; i < sz2; i++)querycheck[i] = 0;
     querytime = 0;
 
     for (int i = 0; i < sz1; i++) {
-        cand.clear();
+        candtot = 0;
         querytime++;
-        len = data1[i].length();
-        if (len - qlimit + 1 - threshold * qlimit <= 0) {
-            for (int j = 0; j < sz2; j++)cand.push_back(j);
-        }
-        else {
-            for (int j = 0; j < len - qlimit + 1; j++){
-                a[j+1].second = j;
-                a[j+1].first = qgram1[data1[i].substr(j, qlimit)];
-            }
-            sort(a+1, a+1+len-qlimit+1);
-            for (int j = 1; j <= prethresh; j++) {
-                tempt = data1[i].substr(a[j].second, qlimit);
-                sans = search(qroot, tempt.c_str(), qlimit);
-                if (sans != NULL) {
-                    for(int k = 0; k < sans->qsize; k++){
-                        t = sans->qgram[k];
-                        if (querycheck[t] != querytime){
-                            querycheck[t] = querytime;
-                            cand.push_back(t);
-                            occurtime[t] = 0;
-                        }
-                        occurtime[t]++;
-                    }
-                }
-            }
-            for (int j = 0; j < les2.size(); j++)cand.push_back(les2[j]);
-        }
-        sort(cand.begin(), cand.end());
- //       printf("cand %d ", i);
-        for (int j = 0; j < cand.size(); j++){
-            t = cand[j];
-            qthresh = my_max(data1[i].length(), data2[t].length()) - qlimit + 1 - threshold * qlimit;
-            int suf1,suf2;
-            suf1 = my_max(data1[i].length() - qlimit + 1 - prethresh, 0);
-            suf2 = my_max(data2[t].length() - qlimit + 1 - prethresh, 0);
-            if (occurtime[t] + my_min(suf1, suf2) >= qthresh) {
-                val = checkED(i, t, threshold);
+        Len = data1[i].length();
+        if (Len - qlimit + 1 - threshold * qlimit <= 0) {
+            for (int j = 0; j < lesable.size(); j++){
+                t = lesable[j];
+                val = CalCulateED(data1[i].c_str(), data1[i].length(), data2[t].c_str(), data2[t].length(), threshold);
                 if (val <= threshold){
                     res.id1 = i;
                     res.id2 = t;
@@ -235,13 +205,64 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
                 }
             }
         }
- //       printf("\n");
+        else {
+            for (int j = 0; j < Len - qlimit + 1; j++){
+                a[j+1].second = j;
+                a[j+1].first = qgrams[data1[i].substr(j, qlimit)];
+            }
+            sort(a+1, a+1+Len-qlimit+1);
+            for (int j = 1; j <= prethresh; j++) {
+                tempt = data1[i].substr(a[j].second, qlimit);
+                sans = search(qroot, tempt.c_str(), qlimit);
+                if (sans != NULL) {
+                    for(int k = 0; k < sans->qsize; k++){
+                        t = sans->qgram[k];
+                        if (querycheck[t] != querytime){
+                            querycheck[t] = querytime;
+                            cand[++candtot] = t;
+                            occurtime[t] = 0;
+                        }
+                        occurtime[t]++;
+                    }
+                }
+            }
+            if (Len <= threshold * qlimit + qlimit - 1 + threshold){
+                for (int j = 0; j < les.size(); j++){
+                    t = les[j];
+                    val = CalCulateED(data1[i].c_str(), data1[i].length(), data2[t].c_str(), data2[t].length(), threshold);
+                    if (val <= threshold){
+                        res.id1 = i;
+                        res.id2 = t;
+                        res.s = val;
+                        result.push_back(res);
+                    }
+                }
+            }
+            for (int j = 1; j <= candtot; j++){
+                t = cand[j];
+                qthresh = my_max(data1[i].length(), data2[t].length()) - qlimit + 1 - threshold * qlimit;
+                suf1 = my_max(data1[i].length() - qlimit + 1 - prethresh, 0);
+                suf2 = my_max(data2[t].length() - qlimit + 1 - prethresh, 0);
+                if (occurtime[t] + my_min(suf1, suf2) >= qthresh) {
+                    val = CalCulateED(data1[i].c_str(), data1[i].length(), data2[t].c_str(), data2[t].length(), threshold);
+                    if (val <= threshold){
+                        res.id1 = i;
+                        res.id2 = t;
+                        res.s = val;
+                        result.push_back(res);
+                    }
+                }
+            }
+        }
     }
+
+    sort(result.begin(), result.end(), ccmp);
 /*
     for (int i = 0; i < result.size(); i++){
         printf("%d %d %d\n", result[i].id1, result[i].id2, result[i].s);
     }
 */
  //   clean(qroot);
+
     return SUCCESS;
 }
