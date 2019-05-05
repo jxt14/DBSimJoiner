@@ -15,6 +15,16 @@ bool ccmp(EDJoinResult a, EDJoinResult b)
     else return a.id2 < b.id2;
 }
 
+inline unsigned hashh(const char* s, int len)
+{
+	unsigned h;
+	h = 0;
+	for (int i = 0; i < len; i++) {
+		h = h * 157 + (int)s[i];
+	}
+	return h;
+}
+
 inline int my_abs(int x)
 {
 	if (x > 0) return x;
@@ -70,27 +80,19 @@ void SimJoiner::createIndex(const char *filename, vector<string>& datas)
 	int len,tot;
 	ifstream fp;
 	p = false;
-    map<string, int> qcheck;
 
-    qcheck.clear();
     datas.clear();
  //   cout << "input " << filename << endl;
 
 	fp.open(filename);
 	
 	string temp,tq;
+    unsigned hq;
     tot = 0;
 	while (getline(fp, temp)) {
         tot++;
 		len = temp.length();
 		datas.push_back(temp);
-        for (int i = 0; i < len-qlimit+1; i++){
-            tq = temp.substr(i, qlimit);
-            if (qcheck[tq] != tot){
-                qcheck[tq] = tot;
-                qgrams[tq]++;
-            }
-        }
  //       cout << temp << endl;
 	}
 	fp.close();
@@ -134,6 +136,7 @@ void SimJoiner::BuildED(int threshold)
 {
     string temp;
     int len;
+    unsigned hq;
     pi a[311];
     les.clear();
     for (int i = 0; i < sz2; i++) {
@@ -147,7 +150,9 @@ void SimJoiner::BuildED(int threshold)
         else{
             for (int j = 0; j < len-qlimit+1; j++){
                 a[j+1].second = j;
-                a[j+1].first = qgrams[data2[i].substr(j, qlimit)];
+                temp = data2[i].substr(j, qlimit);
+                hq = hashh(temp.c_str(), qlimit);
+                a[j+1].first = qgrams[hq];
             }
             sort(a+1, a+1+len-qlimit+1);
             for (int j = 1; j <= prethresh; j++) {
@@ -168,8 +173,11 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
     
     trie* sans;
     string tempt;
+    unsigned hq;
     int cand[200011];
     int candtot,suf1,suf2;
+    map<unsigned, int> qcheck;
+    qcheck.clear();
 
     int Len,t,val;
     pi a[311];
@@ -181,10 +189,23 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
     prethresh = threshold * qlimit + 1;
     qgrams.clear();
     createIndex(filename2, data2);
-    createIndex(filename1, data1);
     sz2 = data2.size();    
-    sz1 = data1.size();
+    for (int i = 0; i < sz2; i++){
+        Len = data2[i].length();
+        for (int j = 0; j < Len - qlimit + 1; j++){
+            tempt = data2[i].substr(j, qlimit);
+            hq = hashh(tempt.c_str(), qlimit);
+            if (qcheck[hq] != i+1){
+                qcheck[hq] = i + 1;
+                qgrams[hq]++;
+            }
+        }
+    }
+
     BuildED(threshold);
+    createIndex(filename1, data1);
+
+    sz1 = data1.size();
 
     for (int i = 0; i < sz2; i++)querycheck[i] = 0;
     querytime = 0;
@@ -208,7 +229,9 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
         else {
             for (int j = 0; j < Len - qlimit + 1; j++){
                 a[j+1].second = j;
-                a[j+1].first = qgrams[data1[i].substr(j, qlimit)];
+                tempt = data1[i].substr(j, qlimit);
+                hq = hashh(tempt.c_str(), qlimit);
+                a[j+1].first = qgrams[hq];
             }
             sort(a+1, a+1+Len-qlimit+1);
             for (int j = 1; j <= prethresh; j++) {

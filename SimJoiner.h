@@ -51,7 +51,7 @@ public:
     SimJoiner();
     ~SimJoiner();
 	std::vector<std::string> data1,data2;
-    std::map<std::string, int> qgrams;
+    std::map<unsigned, int> qgrams;
     std::vector<int> les,lesable;
     int sz1,sz2;
 	int qlimit;
