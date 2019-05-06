@@ -17,11 +17,12 @@
 
 struct trie
 {
-	int qsize,ql,sl;
+	int qsize,ql,sl,id;
 	trie* node[129];
 	std::vector<int> qgram;
 	trie()
 	{
+		id = -1;
 		qsize = 0;
 		ql = -1;
 		sl = -1;
@@ -52,9 +53,9 @@ public:
     ~SimJoiner();
 	std::vector<std::string> data1,data2;
     std::map<unsigned, int> qgrams;
-    std::vector<int> les,lesable;
+    std::vector<int> les,lesable,qgramcount;
     int sz1,sz2;
-	int qlimit;
+	int qlimit,qtot;
 	trie* qroot;
 	trie* jacroot;
 	std::map<int, std::set<unsigned>> jacset;	
@@ -63,7 +64,7 @@ public:
     int occurtime[200011],querycheck[200011];
     int querytime;
 
-	void insert(trie*, const char*, int, int);
+	void insert(trie*, const char*, int, int, int);
     trie* search(trie*, const char*, int);
     void clean(trie*);
 	void createIndex(const char*, std::vector<std::string>&);

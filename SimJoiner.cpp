@@ -4,6 +4,7 @@ using namespace std;
 
 SimJoiner::SimJoiner() {
     qlimit = 4;
+    qgramcount.clear();
 }
 
 SimJoiner::~SimJoiner() {
@@ -13,16 +14,6 @@ bool ccmp(EDJoinResult a, EDJoinResult b)
 {
     if(a.id1 != b.id1)return a.id1 < b.id1;
     else return a.id2 < b.id2;
-}
-
-inline unsigned hashh(const char* s, int len)
-{
-	unsigned h;
-	h = 0;
-	for (int i = 0; i < len; i++) {
-		h = h * 157 + (int)s[i];
-	}
-	return h;
 }
 
 inline int my_abs(int x)
@@ -100,7 +91,7 @@ void SimJoiner::createIndex(const char *filename, vector<string>& datas)
 //    cout << "input end" << endl;
 }
 
-void SimJoiner::insert(trie* rt, const char* s, int id, int tlim)
+void SimJoiner::insert(trie* rt, const char* s, int id, int tlim, int kd)
 {
 	for (int i = 0; i < tlim; i++){
 		if (rt -> node[(int)s[i]] == NULL){
@@ -108,10 +99,25 @@ void SimJoiner::insert(trie* rt, const char* s, int id, int tlim)
 		}
 		rt = rt -> node[(int)s[i]];
 	}
-    if (rt->ql != id){
-	    rt->ql = id;
-        rt->qgram.push_back(id);
-	    rt->qsize++;
+    if (kd == 0) {
+        if (rt->id == -1) {
+            rt->id = ++qtot;
+            if (qgramcount.size() < qtot){
+                qgramcount.push_back(0);
+            }
+            else qgramcount[qtot - 1] = 0;
+        }
+        if (rt->sl != id) {
+            rt->sl = id;
+            qgramcount[rt->id - 1]++;
+        }
+    }
+    else {
+        if (rt->ql != id){
+	        rt->ql = id;
+            rt->qgram.push_back(id);
+	        rt->qsize++;
+        }
     }
 }
 
@@ -136,7 +142,7 @@ void SimJoiner::BuildED(int threshold)
 {
     string temp;
     int len;
-    unsigned hq;
+    trie* qsearch;
     pi a[311];
     les.clear();
     for (int i = 0; i < sz2; i++) {
@@ -151,13 +157,14 @@ void SimJoiner::BuildED(int threshold)
             for (int j = 0; j < len-qlimit+1; j++){
                 a[j+1].second = j;
                 temp = data2[i].substr(j, qlimit);
-                hq = hashh(temp.c_str(), qlimit);
-                a[j+1].first = qgrams[hq];
+                qsearch = search(qroot, temp.c_str(), qlimit);
+                if (qsearch == NULL || qsearch->id == -1)a[j+1].first = 0;
+                else a[j+1].first = qgramcount[qsearch->id - 1];
             }
             sort(a+1, a+1+len-qlimit+1);
             for (int j = 1; j <= prethresh; j++) {
                 temp = data2[i].substr(a[j].second, qlimit);
-                insert(qroot, temp.c_str(), i, qlimit);
+                insert(qroot, temp.c_str(), i, qlimit, 1);
             }
         }
     }
@@ -172,12 +179,12 @@ int SimJoiner::joinJaccard(const char *filename1, const char *filename2, double 
 int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned threshold, vector<EDJoinResult> &result) {
     
     trie* sans;
+    trie* qsearch;
     string tempt;
     unsigned hq;
     int cand[200011];
     int candtot,suf1,suf2;
-    map<unsigned, int> qcheck;
-    qcheck.clear();
+    qtot = 0;
 
     int Len,t,val;
     pi a[311];
@@ -194,11 +201,7 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
         Len = data2[i].length();
         for (int j = 0; j < Len - qlimit + 1; j++){
             tempt = data2[i].substr(j, qlimit);
-            hq = hashh(tempt.c_str(), qlimit);
-            if (qcheck[hq] != i+1){
-                qcheck[hq] = i + 1;
-                qgrams[hq]++;
-            }
+            insert(qroot, tempt.c_str(), i, qlimit, 0);
         }
     }
 
@@ -230,8 +233,9 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
             for (int j = 0; j < Len - qlimit + 1; j++){
                 a[j+1].second = j;
                 tempt = data1[i].substr(j, qlimit);
-                hq = hashh(tempt.c_str(), qlimit);
-                a[j+1].first = qgrams[hq];
+                qsearch = search(qroot, tempt.c_str(), qlimit);
+                if (qsearch == NULL || qsearch->id == -1)a[j+1].first = 0;
+                else a[j+1].first = qgramcount[qsearch->id - 1];
             }
             sort(a+1, a+1+Len-qlimit+1);
             for (int j = 1; j <= prethresh; j++) {
