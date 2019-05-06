@@ -130,6 +130,32 @@ trie* SimJoiner::search(trie* rt, const char* s, int tlim)
     return rt;
 }
 
+bool SimJoiner::checkmid(const char* smid, const char* s2)
+{
+    trie *p1,*p2;
+    int l1,l2,id1,id2;
+    p1 = search(qroot, smid, qlimit);
+    if (p1 == NULL || p1->id == -1){
+        l1 = 0;
+        id1 = -1;
+    }
+    else{
+        l1 = qgramcount[p1->id - 1];
+        id1 = p1->id;
+    }
+    p2 = search(qroot, s2, qlimit);
+    if (p2 == NULL || p2->id == -1){
+        l2 = 0;
+        id2 = -1;
+    }
+    else{
+        l2 = qgramcount[p2->id - 1];
+        id2 = p2->id;
+    }
+    if (l1 != l2) return (l1>l2);
+    else return (id1 >= id2);
+}
+
 void SimJoiner::clean(trie* rt)
 {
     for (int i = 0; i <= 128; i++){
@@ -145,6 +171,7 @@ void SimJoiner::BuildED(int threshold)
     trie* qsearch;
     pi a[311];
     les.clear();
+    lesable.clear();
     for (int i = 0; i < sz2; i++) {
         len = data2[i].length();
         if (len <= threshold * qlimit + qlimit - 1 + threshold){
@@ -158,10 +185,17 @@ void SimJoiner::BuildED(int threshold)
                 a[j+1].second = j;
                 temp = data2[i].substr(j, qlimit);
                 qsearch = search(qroot, temp.c_str(), qlimit);
-                if (qsearch == NULL || qsearch->id == -1)a[j+1].first = 0;
-                else a[j+1].first = qgramcount[qsearch->id - 1];
+                if (qsearch == NULL || qsearch->id == -1){
+                    a[j+1].first.first = 0;
+                    a[j+1].first.second = -1;
+                }
+                else{
+                    a[j+1].first.first = qgramcount[qsearch->id - 1];
+                    a[j+1].first.second = qsearch->id;
+                }
             }
             sort(a+1, a+1+len-qlimit+1);
+            for (int j = 1; j <= len-qlimit+1; j++)qsrt[i][j] = a[j].second;
             for (int j = 1; j <= prethresh; j++) {
                 temp = data2[i].substr(a[j].second, qlimit);
                 insert(qroot, temp.c_str(), i, qlimit, 1);
@@ -169,6 +203,42 @@ void SimJoiner::BuildED(int threshold)
         }
     }
 //    cout << "Build end " << endl;
+}
+
+bool SimJoiner::sufcheck(int id1, int* qs1, int id2, int thresh)
+{
+    int L1,R1,L2,R2,mc,mid,ans;
+    string sc,st;
+    if (thresh <= 0)return true;
+    L1 = prethresh + 1;
+    R1 = data1[id1].length() - qlimit + 1;
+    mc = (L1+R1)/2;
+    sc = data1[id1].substr(qs1[mc], qlimit);
+    while (mc > L1) {
+        if(sc != data1[id1].substr(qs1[mc-1], qlimit))break;
+        mc--;
+    }
+    L2 = prethresh + 1;
+    R2 = data2[id2].length() - qlimit + 1;
+    while (L2<=R2) {
+        mid = (L2+R2)/2;
+        st = data2[id2].substr(qsrt[id2][mid], qlimit);
+        if(checkmid(st.c_str(), sc.c_str())) R2 = mid-1;
+        else L2 = mid+1;
+    }
+    ans = L2;
+    L2 = prethresh + 1;
+    R2 = data2[id2].length() - qlimit + 1;
+    st = data2[id2].substr(qsrt[id2][ans], qlimit);
+    int numcheck;
+    if (st == sc){
+        numcheck = 1 + my_max(mc - L1, ans - L2) + my_min(R1 - mc, R2 - ans);
+    }
+    else {
+        numcheck = my_max(mc - L1, ans - L2) + my_min(R1 - mc, R2 - ans + 1);
+    }
+    if (numcheck >= thresh)return true;
+    else return false;
 }
 
 int SimJoiner::joinJaccard(const char *filename1, const char *filename2, double threshold, vector<JaccardJoinResult> &result) {
@@ -184,6 +254,7 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
     unsigned hq;
     int cand[200011];
     int candtot,suf1,suf2;
+    int* tempq;
     qtot = 0;
 
     int Len,t,val;
@@ -194,9 +265,13 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
     qroot = new trie();
 
     prethresh = threshold * qlimit + 1;
-    qgrams.clear();
     createIndex(filename2, data2);
-    sz2 = data2.size();    
+    sz2 = data2.size();
+    for (int i = 0; i < sz2; i++){
+        tempq = new int[data2[i].length()+1];
+        if(qsrt.size() <= i)qsrt.push_back(tempq);
+        else qsrt[i] = tempq;
+    }
     for (int i = 0; i < sz2; i++){
         Len = data2[i].length();
         for (int j = 0; j < Len - qlimit + 1; j++){
@@ -234,10 +309,18 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
                 a[j+1].second = j;
                 tempt = data1[i].substr(j, qlimit);
                 qsearch = search(qroot, tempt.c_str(), qlimit);
-                if (qsearch == NULL || qsearch->id == -1)a[j+1].first = 0;
-                else a[j+1].first = qgramcount[qsearch->id - 1];
+                if (qsearch == NULL || qsearch->id == -1){
+                    a[j+1].first.first = 0;
+                    a[j+1].first.second = -1;
+                }
+                else{
+                    a[j+1].first.first = qgramcount[qsearch->id - 1];
+                    a[j+1].first.second = qsearch->id;
+                }
             }
             sort(a+1, a+1+Len-qlimit+1);
+            tempq = new int[Len-qlimit+1+1];
+            for (int j = 1; j <= Len-qlimit+1; j++)tempq[j] = a[j].second;
             for (int j = 1; j <= prethresh; j++) {
                 tempt = data1[i].substr(a[j].second, qlimit);
                 sans = search(qroot, tempt.c_str(), qlimit);
@@ -280,6 +363,7 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
                     }
                 }
             }
+            delete tempq;
         }
     }
 
@@ -288,8 +372,10 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
     for (int i = 0; i < result.size(); i++){
         printf("%d %d %d\n", result[i].id1, result[i].id2, result[i].s);
     }
+    printf("\n");
 */
- //   clean(qroot);
+    clean(qroot);
+    for (int i = 0; i < sz2; i++)delete qsrt[i];
 
     return SUCCESS;
 }

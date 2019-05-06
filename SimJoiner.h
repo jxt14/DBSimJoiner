@@ -32,7 +32,7 @@ struct trie
 };
 
 typedef std::pair<int,trie*> pii;
-typedef std::pair<int,int> pi;
+typedef std::pair<std::pair<int,int>,int> pi;
 
 template <typename IDType, typename SimType>
 struct JoinResult {
@@ -52,8 +52,8 @@ public:
     SimJoiner();
     ~SimJoiner();
 	std::vector<std::string> data1,data2;
-    std::map<unsigned, int> qgrams;
     std::vector<int> les,lesable,qgramcount;
+	std::vector<int*> qsrt;
     int sz1,sz2;
 	int qlimit,qtot;
 	trie* qroot;
@@ -70,6 +70,8 @@ public:
 	void createIndex(const char*, std::vector<std::string>&);
 	int CalCulateED(const char*, int, const char*, int, int);
     void BuildED(int);
+	bool sufcheck(int, int*, int, int);
+	bool checkmid(const char*, const char*);
 
 	double timebuild,timequery,timedp;
     int joinJaccard(const char *filename1, const char *filename2, double threshold, std::vector<JaccardJoinResult> &result);
