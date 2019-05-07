@@ -14,6 +14,7 @@
 #include <set>
 #include <cmath>
 #include <map>
+#include <iterator>
 
 struct trie
 {
@@ -32,7 +33,7 @@ struct trie
 };
 
 typedef std::pair<int,trie*> pii;
-typedef std::pair<std::pair<int,int>,int> pi;
+typedef std::pair<int,int> pi;
 
 template <typename IDType, typename SimType>
 struct JoinResult {
@@ -58,7 +59,8 @@ public:
 	int qlimit,qtot;
 	trie* qroot;
 	trie* jacroot;
-	std::map<int, std::set<unsigned>> jacset;	
+	int minjac;
+	std::map<int, std::set<int>> jacset;	
 
     int qthresh,prethresh;
     int occurtime[200011],querycheck[200011];
@@ -72,6 +74,9 @@ public:
     void BuildED(int);
 	bool sufcheck(int, int*, int, int);
 	bool checkmid(const char*, const char*);
+	void CheckJaccard(const char*, double, int, std::vector<JaccardJoinResult>&);
+	double CalCulateJaccard(std::set<int>&, std::set<int>&);
+	void BuildJaccard();
 
 	double timebuild,timequery,timedp;
     int joinJaccard(const char *filename1, const char *filename2, double threshold, std::vector<JaccardJoinResult> &result);
