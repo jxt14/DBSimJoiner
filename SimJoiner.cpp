@@ -442,7 +442,7 @@ int SimJoiner::joinJaccard(const char *filename1, const char *filename2, double 
                     t = sans->qgram[k];
                     if (querycheck[t] != i) {
                         querycheck[t] = i;
-                        cand[++candtot] = 1;
+                        cand[++candtot] = t;
                     }
                 }
             }
@@ -460,7 +460,7 @@ int SimJoiner::joinJaccard(const char *filename1, const char *filename2, double 
         }
     }
 
-    sort(result.begin(), result.end(), jcmp);
+ //   sort(result.begin(), result.end(), jcmp);
 /*
     for (int i = 0; i < result.size(); i++){
         printf("%d %d %.2lf\n", result[i].id1, result[i].id2, result[i].s);
