@@ -4,6 +4,8 @@ using namespace std;
 
 SimJoiner::SimJoiner() {
     qlimit = 4;
+    jactime = 0;
+    qgrams.clear();
     qgramcount.clear();
 }
 
@@ -13,6 +15,12 @@ SimJoiner::~SimJoiner() {
 bool ccmp(EDJoinResult a, EDJoinResult b)
 {
     if(a.id1 != b.id1)return a.id1 < b.id1;
+    else return a.id2 < b.id2;
+}
+
+bool jcmp(JaccardJoinResult a, JaccardJoinResult b)
+{
+    if (a.id1 != b.id1)return a.id1 < b.id1;
     else return a.id2 < b.id2;
 }
 
@@ -93,7 +101,8 @@ void SimJoiner::createIndex(const char *filename, vector<string>& datas)
 
 void SimJoiner::insert(trie* rt, const char* s, int id, int tlim, int kd)
 {
-	for (int i = 0; i < tlim; i++){
+    string temp(s);
+    for (int i = 0; i < tlim; i++){
 		if (rt -> node[(int)s[i]] == NULL){
 			rt->node[(int)s[i]] = new trie();
 		}
@@ -104,8 +113,12 @@ void SimJoiner::insert(trie* rt, const char* s, int id, int tlim, int kd)
             rt->id = ++qtot;
             if (qgramcount.size() < qtot){
                 qgramcount.push_back(0);
+                qgrams.push_back(temp);
             }
-            else qgramcount[qtot - 1] = 0;
+            else{
+                qgramcount[qtot - 1] = 0;
+                qgrams[qtot - 1] = s;
+            }
         }
         if (rt->sl != id) {
             rt->sl = id;
@@ -164,6 +177,44 @@ void SimJoiner::clean(trie* rt)
     delete rt;
 }
 
+int SimJoiner::minpre(int* qg, int threshold)
+{
+    int L,R;
+    L = threshold + 1;
+    R = threshold * qlimit + 1;
+    int a[31];
+    int h,loc,err;
+    for (int i = 1; i <= L; i++) a[i] = qg[i];
+    for (int i = 1; i < L; i++)
+        for (int j = i + 1; j <= L; j++)if(a[i] > a[j]){
+            h = a[i];
+            a[i] = a[j];
+            a[j] = h;
+        }
+    while (L < R) {
+        err = 0;
+        loc = 0;
+        for (int i = 1; i <= L; i++){
+            if (a[i] > loc) {
+                loc = a[i] + qlimit - 1;
+                err++;
+            }
+        }
+        if (err > threshold) break;
+        L++;
+        a[L] = qg[L];
+        for (int i = L-1; i >= 1; i--){
+            if (a[i] > a[i+1]) {
+                h = a[i];
+                a[i] = a[i+1];
+                a[i+1] = h;
+            }
+        }
+    }
+    return L;
+
+}
+
 void SimJoiner::BuildED(int threshold)
 {
     string temp;
@@ -190,7 +241,8 @@ void SimJoiner::BuildED(int threshold)
             }
             sort(a+1, a+1+len-qlimit+1);
             for (int j = 1; j <= len-qlimit+1; j++)qsrt[i][j] = a[j].second;
-            for (int j = 1; j <= prethresh; j++) {
+            pres[i] = minpre(qsrt[i], threshold);
+            for (int j = 1; j <= pres[i]; j++) {
                 temp = data2[i].substr(a[j].second, qlimit);
                 insert(qroot, temp.c_str(), i, qlimit, 1);
             }
@@ -244,9 +296,15 @@ double SimJoiner::CalCulateJaccard(set<int> &set1, set<int> &set2)
 	return (double)(tt)/(double)(set1.size() + set2.size() - tt);
 }
 
-void SimJoiner::BuildJaccard()
+void SimJoiner::BuildJaccard(double threshold)
 {
     int inx;
+    int qsz,ps;
+    psi a[311];
+    double tempthresh;
+    int jacthresh;
+    set<string> jacquery;
+
     string tempt;
     trie* sans;
     minjac = 2147483647;
@@ -258,7 +316,6 @@ void SimJoiner::BuildJaccard()
                 if (inx < j) {
                     tempt = data2[i].substr(inx, j - inx);
                     insert(jacroot, tempt.c_str(), i, j - inx, 0);
-                    insert(jacroot, tempt.c_str(), i, j - inx, 1);
                     sans = search(jacroot, tempt.c_str(), j - inx);
                     jacset[i].insert(sans->id);
                 }
@@ -268,144 +325,142 @@ void SimJoiner::BuildJaccard()
         if (inx < data2[i].length()){
             tempt = data2[i].substr(inx, data2[i].length() - inx);
             insert(jacroot, tempt.c_str(), i, data2[i].length() - inx, 0);
-            insert(jacroot, tempt.c_str(), i, data2[i].length() - inx, 1);
             sans = search(jacroot, tempt.c_str(), data2[i].length() - inx);
             jacset[i].insert(sans->id);
         }
         if (jacset[i].size() < minjac)minjac = jacset[i].size();
     }
-    cout << endl;
+
+    for (int i = 0; i < sz2; i++){
+        jacquery.clear();
+        inx = 0;
+        for (int j = 0; j < data2[i].length(); j++){
+            if (data2[i][j] == ' '){
+                if (inx < j){
+                    tempt = data2[i].substr(inx, j-inx);
+                    jacquery.insert(tempt);
+                }
+                inx = j + 1;
+            }
+        }
+        if (inx < data2[i].length()){
+            tempt = data2[i].substr(inx, data2[i].length() - inx);
+            jacquery.insert(tempt);
+        }
+        qsz = 0;
+        for (auto word: jacquery) {
+            qsz++;
+            sans = search(jacroot, word.c_str(), word.length());
+            a[qsz].first = qgramcount[sans->id - 1];
+            a[qsz].second = word;
+        }
+        sort(a+1, a+1+qsz);
+        assert(qsz == jacset[i].size());
+        jacthresh = (1-threshold)*jacset[i].size() + 1;
+        for (int j = 1; j <= jacthresh; j++) {
+            tempt = a[j].second;
+            insert(jacroot, tempt.c_str(), i, tempt.length(), 1);
+        }
+    }
 
 
 //	cout << "build jaccard finished" << endl;
 }
 
-void SimJoiner::CheckJaccard(const char* query, double threshold, int id, vector<JaccardJoinResult>&result)
-{
-	string tempt(query);
-	int inx,len,listdec;
-	vector<int> shortlist;
-	set<string> queryword;
-	set<int> jacquery;
+
+int SimJoiner::joinJaccard(const char *filename1, const char *filename2, double threshold, vector<JaccardJoinResult> &result) {
+
+    int len,inx,pre1,pre2,mxjac,suf1,suf2;
+    double qt;
+    set<string> jacquery;
+    set<int> jacid;
+    string temp;
+    psi a[311];
+    int jacsz;
+    double tempthresh,fv;
+    int jacthresh;
     trie* sans;
-    int qsize;
-    pair<int,trie*> qlists[200011];
-
-	qsize = 0;
-	len = strlen(query);
-	inx = 0;
-	
-	int k,t;
-	string ts;
-
-	inx = 0;
-	for (int i = 0; i < len; i++){
-		if (query[i] == ' '){
-			if (inx < i) {
-				ts = tempt.substr(inx, i - inx);
-				queryword.insert(ts);
-                insert(jacroot, ts.c_str(), sz2 + id, i - inx, 0);
-                sans = search(jacroot, ts.c_str(), i - inx);
-				jacquery.insert(sans->id);
-			}
-			inx = i + 1;
-		}
-	}	
-
-	if (inx < len) {
-		ts = tempt.substr(inx, len - inx);
-		queryword.insert(ts);
-        insert(jacroot, ts.c_str(), sz2 + id, len - inx, 0);
-		sans = search(jacroot, ts.c_str(), len - inx);
-        jacquery.insert(sans->id);
-	}
-
-	for (auto w: queryword) {
-		sans = search(jacroot, (char*)w.c_str(), w.length());
-        if (sans != NULL) {
-            qsize++;
-            qlists[qsize] = make_pair(sans->qsize, sans);
-        }
-	}
-
-	double fv;
-	double thresh1,thresh2;
-	thresh1 = jacquery.size() * threshold;
-	thresh2 = (minjac + jacquery.size()) * threshold / (1.0 + threshold);
-	if (ceil(thresh1) > ceil(thresh2)) qthresh = ceil(thresh1);
-	else qthresh = ceil(thresh2);
-
+    int cand[200011];
+    int t,candtot;
     JaccardJoinResult Jr;
 
-	if (qthresh <= 0) {
-		for (int i = 0; i < sz2; i++) {
-			fv = CalCulateJaccard(jacset[i], jacquery);
-            Jr.id1 = id;
-            Jr.id2 = i;
-            Jr.s = fv;
-			if (fv >= threshold) result.push_back(Jr); 
-		}
-	}
-	else {
+    result.clear();
 
-	if (qthresh - 1 < 0) listdec = 0;
-	else listdec = qthresh - 1;
-	listdec = qsize - listdec;
-	if (listdec < 0) return;
-	sort(qlists + 1, qlists + 1 + qsize);
-	
-	for (int i = 1; i <= listdec; i++){
-		for (int j = 0; j < qlists[i].second->qsize; j++){
-			t = qlists[i].second->qgram[j];
-			if (querycheck[t] != id) {
-				querycheck[t] = id;
-				occurtime[t] = 0;
-				shortlist.push_back(t);
-			}
-			occurtime[t]++;
-		}
-	}
+    jacroot = new trie();
+    qtot = 0;
 
-	sort(shortlist.begin(), shortlist.end());
-	int soc;
+    createIndex(filename2, data2);
+    sz2 = data2.size();
+    BuildJaccard(threshold);
+    createIndex(filename1, data1);
+    sz1 = data1.size();
 
-	for (int i = 0; i < shortlist.size(); i++){
-		t = shortlist[i];
-		soc = occurtime[t];
-		for (int j = listdec + 1; j <= qsize; j++) {
-			if (soc + qsize - j + 1 < qthresh) break;
-			if (soc >= qthresh) break;
-			if (binary_search(qlists[j].second->qgram.begin(), qlists[j].second->qgram.end(), t) == true) soc++;
-		}
-		if (soc >= qthresh) {
-			fv = CalCulateJaccard(jacset[t], jacquery);
-			if (fv >= threshold) {
-                Jr.id1 = id;
+
+    for (int i = 0; i < sz2; i++)querycheck[i] = -1;
+
+    for (int i = 0; i < sz1; i++){
+        jacquery.clear();
+        jacid.clear();
+        jacsz = 0;
+        candtot = 0;
+        len = data1[i].length();
+        inx = 0;
+        for (int j = 0; j < len; j++){
+            if(data1[i][j] == ' '){
+                if(inx < j){
+                    temp = data1[i].substr(inx, j - inx);
+                    jacquery.insert(temp);
+                }
+                inx = j + 1;
+            }
+        }
+        if (inx < len) {
+            temp = data1[i].substr(inx, len - inx);
+            jacquery.insert(temp);
+        }
+        
+        for (auto ss:jacquery) {
+            jacsz++;
+            a[jacsz].second = ss;
+            sans = search(jacroot, ss.c_str(), ss.length());
+            if (sans == NULL || sans->id == -1){
+                a[jacsz].first = 0;
+                jacid.insert(qtot+jacsz);
+            }
+            else{
+                a[jacsz].first = qgramcount[sans->id - 1]; 
+                jacid.insert(sans->id);
+            }
+        }
+        sort(a+1, a+1+jacsz);
+        assert(jacsz == jacquery.size());
+        jacthresh = (1-threshold)*jacquery.size() + 1;
+        for (int j = 1; j <= jacthresh; j++) {
+            sans = search(jacroot, a[j].second.c_str(), a[j].second.length());
+            if (sans != NULL) {
+                for (int k = 0; k < sans->qsize; k++) {
+                    t = sans->qgram[k];
+                    if (querycheck[t] != i) {
+                        querycheck[t] = i;
+                        cand[++candtot] = 1;
+                    }
+                }
+            }
+        }
+        sort(cand+1, cand+1+candtot);
+        for (int j = 1; j <= candtot; j++) {
+            t = cand[j];
+            fv = CalCulateJaccard(jacset[t], jacid);
+            if (fv >= threshold) {
+                Jr.id1 = i;
                 Jr.id2 = t;
                 Jr.s = fv;
                 result.push_back(Jr);
             }
         }
-	}
+    }
 
-	}
-}
-
-int SimJoiner::joinJaccard(const char *filename1, const char *filename2, double threshold, vector<JaccardJoinResult> &result) {
-    result.clear();
-
-    jacroot = new trie();
-
-    createIndex(filename2, data2);
-    sz2 = data2.size();
-    qtot = 0;
-    BuildJaccard();
-    for (int i = 0; i < sz2; i++)querycheck[i] = -1;
-    createIndex(filename1, data1);
-    sz1 = data1.size();
-
-    for (int i = 0; i < sz1; i++)CheckJaccard(data1[i].c_str(), threshold, i, result);
-
+    sort(result.begin(), result.end(), jcmp);
 /*
     for (int i = 0; i < result.size(); i++){
         printf("%d %d %.2lf\n", result[i].id1, result[i].id2, result[i].s);
@@ -428,7 +483,7 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
     int* tempq;
     qtot = 0;
 
-    int Len,t,val;
+    int Len,t,val,mp;
     pi a[311];
     EDJoinResult res;
 
@@ -486,7 +541,8 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
             sort(a+1, a+1+Len-qlimit+1);
             tempq = new int[Len-qlimit+1+1];
             for (int j = 1; j <= Len-qlimit+1; j++)tempq[j] = a[j].second;
-            for (int j = 1; j <= prethresh; j++) {
+            mp = minpre(tempq, threshold);
+            for (int j = 1; j <= mp; j++) {
                 tempt = data1[i].substr(a[j].second, qlimit);
                 sans = search(qroot, tempt.c_str(), qlimit);
                 if (sans != NULL) {
@@ -516,8 +572,8 @@ int SimJoiner::joinED(const char *filename1, const char *filename2, unsigned thr
             for (int j = 1; j <= candtot; j++){
                 t = cand[j];
                 qthresh = my_max(data1[i].length(), data2[t].length()) - qlimit + 1 - threshold * qlimit;
-                suf1 = my_max(data1[i].length() - qlimit + 1 - prethresh, 0);
-                suf2 = my_max(data2[t].length() - qlimit + 1 - prethresh, 0);
+                suf1 = my_max(data1[i].length() - qlimit + 1 - pres[i], 0);
+                suf2 = my_max(data2[t].length() - qlimit + 1 - mp, 0);
                 if (occurtime[t] + my_min(suf1, suf2) >= qthresh) {
                     val = CalCulateED(data1[i].c_str(), data1[i].length(), data2[t].c_str(), data2[t].length(), threshold);
                     if (val <= threshold){
